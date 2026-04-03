@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OfertaBot — Tech & Games</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0c0f;
+    --surface: #13131a;
+    --surface2: #1a1a25;
+    --border: #ffffff0f;
+    --border2: #ffffff1a;
+    --text: #f0f0f8;
+    --muted: #8888aa;
+    --accent: #7c5cfc;
+    --accent2: #c23aff;
+    --green: #00e5a0;
+    --red: #ff4f6a;
+    --yellow: #ffd166;
+    --steam: #1b9bff;
+    --nuuvem: #ff6b35;
+    --instant: #00c785;
+    --gmg: #38b000;
+    --kabum: #f5a623;
+    --tera: #0070cc;
+    --pelando: #e83e3e;
+    --glow: 0 0 30px #7c5cfc22;
+    --r: 10px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: #0c0c0fdd;
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border2);
+    padding: 0 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 60px;
+  }
+  .logo {
+    font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .logo-icon { width: 28px; height: 28px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .last-update { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; }
+  .btn-refresh {
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--text); padding: 6px 14px; border-radius: 8px;
+    font-size: 12px; font-family: 'Space Mono', monospace; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; transition: all .2s;
+  }
+  .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-refresh.loading .icon-refresh { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── MAIN LAYOUT ── */
+  .container { max-width: 1440px; margin: 0 auto; padding: 0 2rem; }
+
+  /* ── STATS BAR ── */
+  .stats-bar {
+    display: flex; gap: 12px; padding: 1.5rem 0 1rem;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .stats-bar::-webkit-scrollbar { display: none; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 14px 20px; flex-shrink: 0; min-width: 140px;
+    transition: border-color .2s;
+  }
+  .stat-card:hover { border-color: var(--border2); }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-family: 'Space Mono', monospace; }
+  .stat-val { font-size: 1.8rem; font-weight: 800; line-height: 1.2; margin-top: 4px; }
+  .stat-val.accent { color: var(--accent); }
+  .stat-val.green { color: var(--green); }
+  .stat-val.yellow { color: var(--yellow); }
+
+  /* ── FILTERS ── */
+  .filters {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  }
+  .filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .filter-label { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; white-space: nowrap; }
+  .chip {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+    transition: all .15s; white-space: nowrap; font-weight: 600;
+  }
+  .chip:hover, .chip.active { border-color: var(--accent); color: var(--accent); background: #7c5cfc18; }
+  .chip.active { background: #7c5cfc25; }
+  .search-wrap { position: relative; flex: 1; min-width: 200px; }
+  .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  #search {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 7px 12px 7px 34px; border-radius: 8px;
+    font-size: 13px; outline: none; transition: border .2s;
+    font-family: 'Syne', sans-serif;
+  }
+  #search:focus { border-color: var(--accent); }
+  #search::placeholder { color: var(--muted); }
+  select.filter-select {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 28px 6px 10px; border-radius: 8px;
+    font-size: 12px; outline: none; cursor: pointer; font-family: 'Syne', sans-serif;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238888aa'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+  }
+  select.filter-select:focus { border-color: var(--accent); }
+
+  /* ── GRID ── */
+  .offers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px; margin-bottom: 2rem;
+  }
+
+  /* ── OFFER CARD ── */
+  .offer-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); overflow: hidden; display: flex; flex-direction: column;
+    transition: transform .2s, border-color .2s, box-shadow .2s;
+    position: relative;
+  }
+  .offer-card:hover { transform: translateY(-3px); border-color: var(--border2); box-shadow: var(--glow); }
+  .card-img {
+    width: 100%; height: 140px; object-fit: cover;
+    background: var(--surface2);
+  }
+  .card-img-placeholder {
+    width: 100%; height: 140px; background: var(--surface2);
+    display: flex; align-items: center; justify-content: center; color: var(--muted);
+    font-size: 2rem;
+  }
+  .card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .card-source {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10px; font-weight: 600; font-family: 'Space Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px;
+    border-radius: 4px; width: fit-content;
+  }
+  .card-source.steam { background: #1b9bff18; color: var(--steam); }
+  .card-source.nuuvem { background: #ff6b3518; color: var(--nuuvem); }
+  .card-source.instant-gaming { background: #00c78518; color: var(--instant); }
+  .card-source.green-man-gaming { background: #38b00018; color: var(--gmg); }
+  .card-source.kabum { background: #f5a62318; color: var(--kabum); }
+  .card-source.terabyte-shop { background: #0070cc18; color: var(--tera); }
+  .card-source.pelando { background: #e83e3e18; color: var(--pelando); }
+  .card-title { font-size: 13.5px; font-weight: 600; line-height: 1.4; flex: 1; color: var(--text); }
+  .card-pricing { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .price-current { font-size: 1.2rem; font-weight: 800; color: var(--green); font-family: 'Space Mono', monospace; }
+  .price-original { font-size: 12px; color: var(--muted); text-decoration: line-through; font-family: 'Space Mono', monospace; }
+  .discount-badge {
+    background: #ff4f6a22; color: var(--red); border: 1px solid #ff4f6a33;
+    border-radius: 5px; padding: 1px 7px; font-size: 11px; font-weight: 700;
+    font-family: 'Space Mono', monospace; margin-left: auto;
+  }
+  .card-footer { padding: 0 14px 12px; }
+  .btn-ver {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: #7c5cfc18; border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 7px; padding: 8px;
+    font-size: 12px; font-weight: 700; cursor: pointer; width: 100%;
+    transition: all .15s; font-family: 'Space Mono', monospace;
+  }
+  .btn-ver:hover { background: var(--accent); color: white; }
+
+  /* ── BADGES ── */
+  .badge-hot {
+    position: absolute; top: 10px; left: 10px;
+    background: var(--red); color: white;
+    font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px;
+    font-family: 'Space Mono', monospace; letter-spacing: 0.5px;
+  }
+  .badge-new {
+    position: absolute; top: 10px; right: 10px;
+    background: var(--green); color: #0c0c0f;
+    font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px;
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* ── SOURCE PILLS ── */
+  .sources-legend {
+    display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 1.5rem;
+  }
+  .src-pill {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600;
+  }
+  .src-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── PAGINATION ── */
+  .pagination {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 1rem 0 2rem;
+  }
+  .page-btn {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 14px; border-radius: 7px; cursor: pointer;
+    font-family: 'Space Mono', monospace; font-size: 12px; transition: all .15s;
+  }
+  .page-btn:hover, .page-btn.active { border-color: var(--accent); color: var(--accent); }
+  .page-info { color: var(--muted); font-size: 12px; font-family: 'Space Mono', monospace; }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    text-align: center; padding: 4rem 2rem; color: var(--muted);
+    grid-column: 1 / -1;
+  }
+  .empty-state .icon { font-size: 3rem; margin-bottom: 1rem; }
+  .empty-state h3 { color: var(--text); font-size: 1.1rem; margin-bottom: .5rem; }
+
+  /* ── LOADING ── */
+  .skeleton {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r); overflow: hidden;
+  }
+  .skel-img { height: 140px; background: linear-gradient(90deg, var(--surface2) 25%, #ffffff05 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+  .skel-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .skel-line { height: 12px; background: var(--surface2); border-radius: 4px; animation: shimmer 1.5s infinite; }
+  .skel-line.w60 { width: 60%; }
+  .skel-line.w40 { width: 40%; }
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    background: var(--surface2); border: 1px solid var(--border2);
+    border-radius: var(--r); padding: 12px 18px;
+    font-size: 13px; display: flex; align-items: center; gap: 10px;
+    transform: translateY(100px); opacity: 0; transition: all .3s;
+    max-width: 320px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--green); }
+  .toast.error { border-color: var(--red); }
+
+  /* ── SECTION TITLE ── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+  .section-title { font-size: 1rem; font-weight: 800; letter-spacing: -0.3px; }
+  .section-count { font-size: 12px; color: var(--muted); font-family: 'Space Mono', monospace; }
+
+  /* ── CATEGORY TABS ── */
+  .category-tabs { display: flex; gap: 6px; padding: .75rem 0; }
+  .cat-tab {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 18px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 6px;
+  }
+  .cat-tab:hover, .cat-tab.active { background: #7c5cfc20; border-color: var(--accent); color: var(--accent); }
+  .cat-count { background: var(--surface2); border-radius: 10px; padding: 1px 7px; font-size: 10px; font-family: 'Space Mono', monospace; }
+
+  @media (max-width: 640px) {
+    header { padding: 0 1rem; }
+    .container { padding: 0 1rem; }
+    .logo span { display: none; }
+    .offers-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-val { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg class="logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="7" fill="url(#lg)"/>
+      <path d="M8 14c0-3.3 2.7-6 6-6s6 2.7 6 6-2.7 6-6 6" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="14" cy="14" r="2" fill="white"/>
+      <path d="M14 8v-2M14 22v-2M20 14h2M6 14h2" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#7c5cfc"/><stop offset="1" stop-color="#c23aff"/></linearGradient></defs>
+    </svg>
+    <span>OfertaBot</span>
+  </div>
+  <div class="header-right">
+    <span class="last-update" id="last-update">—</span>
+    <button class="btn-refresh" id="btn-refresh" onclick="triggerRefresh()">
+      <svg class="icon-refresh" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      Atualizar
+    </button>
+  </div>
+</header>
+
+<div class="container">
+  <!-- STATS -->
+  <div class="stats-bar" id="stats-bar">
+    <div class="stat-card"><div class="stat-label">Total Ofertas</div><div class="stat-val accent" id="stat-total">—</div></div>
+    <div class="stat-card"><div class="stat-label">Jogos</div><div class="stat-val green" id="stat-games">—</div></div>
+    <div class="stat-card"><div class="stat-label">Tech / PC</div><div class="stat-val yellow" id="stat-tech">—</div></div>
+    <div class="stat-card"><div class="stat-label">Fontes</div><div class="stat-val" id="stat-sources">—</div></div>
+    <div class="stat-card"><div class="stat-label">Maior Desconto</div><div class="stat-val green" id="stat-best-disc">—</div></div>
+  </div>
+
+  <!-- SOURCE LEGEND -->
+  <div class="sources-legend">
+    <div class="src-pill"><div class="src-dot" style="background:var(--steam)"></div>Steam</div>
+    <div class="src-pill"><div class="src-dot" style="background:var(--nuuvem)"></div>Nuuvem</div>
+    <div class="src-pill"><div class="src-dot" style="background:var(--instant)"></div>Instant Gaming</div>
+    <div class="src-pill"><div class="src-dot" style="background:var(--gmg)"></div>Green Man Gaming</div>
+    <div class="src-pill"><div class="src-dot" style="background:var(--kabum)"></div>KaBuM!</div>
+    <div class="src-pill"><div class="src-dot" style="background:var(--tera)"></div>Terabyte Shop</div>
+    <div class="src-pill"><div class="src-dot" style="background:var(--pelando)"></div>Pelando</div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input id="search" type="text" placeholder="Buscar ofertas..." oninput="onSearch(this.value)">
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Fonte:</span>
+      <select class="filter-select" id="filter-source" onchange="onFilterChange()">
+        <option value="all">Todas</option>
+        <option value="Steam">Steam</option>
+        <option value="Nuuvem">Nuuvem</option>
+        <option value="Instant Gaming">Instant Gaming</option>
+        <option value="Green Man Gaming">Green Man Gaming</option>
+        <option value="KaBuM!">KaBuM!</option>
+        <option value="Terabyte Shop">Terabyte Shop</option>
+        <option value="Pelando">Pelando</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Desconto mín.:</span>
+      <div class="chip" onclick="setDiscount(0)" id="disc-0">Todos</div>
+      <div class="chip" onclick="setDiscount(25)" id="disc-25">25%+</div>
+      <div class="chip" onclick="setDiscount(50)" id="disc-50">50%+</div>
+      <div class="chip" onclick="setDiscount(75)" id="disc-75">75%+</div>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Ordenar:</span>
+      <select class="filter-select" id="filter-sort" onchange="onFilterChange()">
+        <option value="discount">Maior Desconto</option>
+        <option value="price_asc">Menor Preço</option>
+        <option value="price_desc">Maior Preço</option>
+        <option value="newest">Mais Recentes</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- CATEGORY TABS -->
+  <div class="category-tabs">
+    <div class="cat-tab active" id="cat-all" onclick="setCategory('all')">🎯 Todas <span class="cat-count" id="cnt-all">0</span></div>
+    <div class="cat-tab" id="cat-games" onclick="setCategory('games')">🎮 Jogos <span class="cat-count" id="cnt-games">0</span></div>
+    <div class="cat-tab" id="cat-tech" onclick="setCategory('tech')">🖥️ Tech / PC <span class="cat-count" id="cnt-tech">0</span></div>
+  </div>
+
+  <!-- SECTION HEADER -->
+  <div class="section-header">
+    <div class="section-title" id="section-title">Melhores Ofertas</div>
+    <div class="section-count" id="section-count">carregando...</div>
+  </div>
+
+  <!-- GRID -->
+  <div class="offers-grid" id="offers-grid">
+    <!-- skeletons -->
+    ${Array(12).fill('<div class="skeleton"><div class="skel-img"></div><div class="skel-body"><div class="skel-line w60"></div><div class="skel-line"></div><div class="skel-line w40"></div></div></div>').join('')}
+  </div>
+
+  <!-- PAGINATION -->
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api';
+let state = {
+  offers: [], total: 0, page: 1, per_page: 24,
+  category: 'all', source: 'all', sort: 'discount',
+  min_discount: 0, search: '', searchTimer: null
+};
+
+function sourceClass(src) {
+  return src.toLowerCase().replace(/[^a-z]/g, '-').replace(/-+/g, '-').replace(/-$/, '');
+}
+
+function fmtPrice(p) {
+  if (!p && p !== 0) return '—';
+  return 'R$ ' + Number(p).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function renderCards(offers) {
+  const grid = document.getElementById('offers-grid');
+  if (!offers.length) {
+    grid.innerHTML = `<div class="empty-state"><div class="icon">🔍</div><h3>Nenhuma oferta encontrada</h3><p>Tente ajustar os filtros ou aguarde a próxima atualização</p></div>`;
+    return;
+  }
+  grid.innerHTML = offers.map(o => {
+    const src = sourceClass(o.source);
+    const isHot = (o.discount || 0) >= 75;
+    const img = o.image
+      ? `<img class="card-img" src="${o.image}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const placeholder = `<div class="card-img-placeholder" style="${o.image ? 'display:none' : ''}">🎮</div>`;
+    const discBadge = o.discount ? `<span class="discount-badge">-${o.discount}%</span>` : '';
+    const origPrice = o.original_price ? `<span class="price-original">${fmtPrice(o.original_price)}</span>` : '';
+    const hotBadge = isHot ? '<div class="badge-hot">🔥 HOT</div>' : '';
+    return `
+    <div class="offer-card">
+      ${hotBadge}
+      ${img}${placeholder}
+      <div class="card-body">
+        <div class="card-source ${src}">${o.source}</div>
+        <div class="card-title">${o.title}</div>
+        <div class="card-pricing">
+          <span class="price-current">${o.price > 0 ? fmtPrice(o.price) : 'Ver site'}</span>
+          ${origPrice}
+          ${discBadge}
+        </div>
+      </div>
+      <div class="card-footer">
+        <a href="${o.url}" target="_blank" rel="noopener noreferrer">
+          <div class="btn-ver">Ver oferta →</div>
+        </a>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPagination(total, page, per_page) {
+  const pages = Math.ceil(total / per_page);
+  const el = document.getElementById('pagination');
+  if (pages <= 1) { el.innerHTML = ''; return; }
+  let html = '';
+  if (page > 1) html += `<button class="page-btn" onclick="goPage(${page-1})">← Anterior</button>`;
+  const start = Math.max(1, page - 2), end = Math.min(pages, page + 2);
+  for (let p = start; p <= end; p++) {
+    html += `<button class="page-btn ${p === page ? 'active' : ''}" onclick="goPage(${p})">${p}</button>`;
+  }
+  if (page < pages) html += `<button class="page-btn" onclick="goPage(${page+1})">Próxima →</button>`;
+  html += `<span class="page-info">Pág. ${page}/${pages}</span>`;
+  el.innerHTML = html;
+}
+
+async function fetchOffers() {
+  const params = new URLSearchParams({
+    page: state.page, per_page: state.per_page,
+    sort: state.sort,
+  });
+  if (state.category !== 'all') params.set('category', state.category);
+  if (state.source !== 'all') params.set('source', state.source);
+  if (state.min_discount > 0) params.set('min_discount', state.min_discount);
+  if (state.search) params.set('q', state.search);
+  try {
+    const r = await fetch(`${API}/offers?${params}`);
+    const data = await r.json();
+    renderCards(data.offers);
+    renderPagination(data.total, data.page, data.per_page);
+    document.getElementById('section-count').textContent = `${data.total} ofertas`;
+    if (data.last_update) {
+      const d = new Date(data.last_update);
+      document.getElementById('last-update').textContent = 'Atualizado: ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+    }
+  } catch(e) {
+    document.getElementById('offers-grid').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Erro ao conectar na API</h3><p>Certifique-se que o servidor está rodando em localhost:5000</p></div>`;
+  }
+}
+
+async function fetchStats() {
+  try {
+    const r = await fetch(`${API}/stats`);
+    const d = await r.json();
+    document.getElementById('stat-total').textContent = d.total || 0;
+    document.getElementById('stat-games').textContent = d.categories?.games || 0;
+    document.getElementById('stat-tech').textContent = d.categories?.tech || 0;
+    document.getElementById('stat-sources').textContent = Object.keys(d.sources || {}).length;
+    const top = d.top_discounts?.[0];
+    document.getElementById('stat-best-disc').textContent = top ? `-${top.discount}%` : '—';
+    document.getElementById('cnt-all').textContent = d.total || 0;
+    document.getElementById('cnt-games').textContent = d.categories?.games || 0;
+    document.getElementById('cnt-tech').textContent = d.categories?.tech || 0;
+  } catch(e) {}
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+async function triggerRefresh() {
+  const btn = document.getElementById('btn-refresh');
+  btn.classList.add('loading');
+  try {
+    const r = await fetch(`${API}/refresh`, {method:'POST'});
+    const d = await r.json();
+    showToast(d.message, d.status === 'already_running' ? 'error' : 'success');
+    if (d.status === 'started') {
+      setTimeout(() => { fetchOffers(); fetchStats(); btn.classList.remove('loading'); }, 5000);
+      setTimeout(() => { fetchOffers(); fetchStats(); }, 15000);
+    } else {
+      btn.classList.remove('loading');
+    }
+  } catch(e) {
+    showToast('Erro ao conectar na API', 'error');
+    btn.classList.remove('loading');
+  }
+}
+
+function setCategory(cat) {
+  state.category = cat; state.page = 1;
+  ['all','games','tech'].forEach(c => document.getElementById('cat-'+c).classList.remove('active'));
+  document.getElementById('cat-'+cat).classList.add('active');
+  const titles = {all:'Melhores Ofertas', games:'Jogos em Promoção', tech:'Tech & Hardware'};
+  document.getElementById('section-title').textContent = titles[cat] || 'Ofertas';
+  fetchOffers();
+}
+function setDiscount(v) {
+  state.min_discount = v; state.page = 1;
+  [0,25,50,75].forEach(d => document.getElementById('disc-'+d).classList.remove('active'));
+  document.getElementById('disc-'+v).classList.add('active');
+  fetchOffers();
+}
+function onFilterChange() {
+  state.source = document.getElementById('filter-source').value;
+  state.sort = document.getElementById('filter-sort').value;
+  state.page = 1; fetchOffers();
+}
+function onSearch(val) {
+  clearTimeout(state.searchTimer);
+  state.searchTimer = setTimeout(() => { state.search = val; state.page = 1; fetchOffers(); }, 400);
+}
+function goPage(p) { state.page = p; fetchOffers(); window.scrollTo({top: 0, behavior:'smooth'}); }
+
+// Init
+fetchOffers();
+fetchStats();
+</script>
+</body>
+</html>
