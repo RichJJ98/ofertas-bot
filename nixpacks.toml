@@ -2,9 +2,9 @@
 nixPkgs = ["python311"]
 
 [phases.install]
-# Adicionamos a flag que permite instalar pacotes no ambiente do Nixpacks
-cmds = ["pip install --break-system-packages -r requirements.txt"]
+# Usamos 'python -m pip' em vez de apenas 'pip' para garantir que ele encontre o instalador
+cmds = ["python -m pip install --break-system-packages -r requirements.txt"]
 
 [start]
-# Ajustado para o caminho que aparece no seu arquivo
+# Verifique se o caminho do arquivo está correto (com ou sem a pasta 'backend/')
 cmd = "python backend/server.py"
