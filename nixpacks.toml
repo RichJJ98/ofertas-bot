@@ -1,8 +1,10 @@
 [phases.setup]
-nixPkgs = ["python311", "python311Packages.pip"]
+nixPkgs = ["python311"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+# Adicionamos a flag que permite instalar pacotes no ambiente do Nixpacks
+cmds = ["pip install --break-system-packages -r requirements.txt"]
 
 [start]
+# Ajustado para o caminho que aparece no seu arquivo
 cmd = "python backend/server.py"
