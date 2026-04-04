@@ -169,7 +169,7 @@ def trigger_refresh():
 
 @app.route("/api/sources")
 def get_sources():
-    return jsonify({"sources": ["Steam","Nuuvem","Instant Gaming","Green Man Gaming","KaBuM!","Terabyte Shop","Pelando"]})
+    return jsonify({"sources": ["Steam","Nuuvem","Instant Gaming","Green Man Gaming","Mercado Livre","KaBuM!","Terabyte Shop","Pichau","Amazon BR"]})
 
 # ── favorites routes ──────────────────────────────────────
 
