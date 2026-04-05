@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import time
+import re
 from datetime import datetime
 
 HEADERS = {
@@ -10,65 +11,63 @@ HEADERS = {
     "Accept": "application/json, text/html, */*",
 }
 
-# ──────────────────────────────────────────
-# MERCADO LIVRE — API pública oficial
-# Docs: https://developers.mercadolibre.com.br
-# ──────────────────────────────────────────
-
-ML_SITE = "MLB"  # Brasil
 ML_API  = "https://api.mercadolibre.com"
+ML_SITE = "MLB"
 
-# IDs oficiais das lojas no ML (seller_id)
-ML_SELLERS = {
-    "KaBuM!":        "281051892",
-    "Terabyte Shop": "239729076",
-    "Pichau":        "340934064",
-    "Amazon BR":     "36440183",
+# ──────────────────────────────────────────
+# Nicknames oficiais no ML (mais estável que seller_id)
+# Fonte: mercadolivre.com.br/loja/<nickname>
+# ──────────────────────────────────────────
+ML_STORES = {
+    "KaBuM!":        "KABUM-COMERCIO-ELETRONICO",
+    "Terabyte Shop": "TERABYTESHOP",
+    "Pichau":        "PICHAU",
+    "Amazon BR":     "AMAZON-IMPORTADOS",
 }
 
-# Queries de busca por categoria
+# Fallback: queries de tech quando lojas específicas falharem
 ML_TECH_QUERIES = [
-    "placa de video",
-    "processador",
-    "memoria ram",
-    "ssd nvme",
+    "placa de video rtx",
+    "processador amd ryzen",
+    "processador intel",
+    "memoria ram ddr4 ddr5",
+    "ssd nvme m2",
     "headset gamer",
     "monitor gamer",
-    "fonte atx",
-    "placa mae",
-    "gabinete gamer",
-    "cooler cpu",
-    "teclado gamer",
-    "mouse gamer",
+    "fonte atx modular",
+    "placa mae gaming",
+    "cooler cpu water cooler",
     "notebook gamer",
+    "teclado gamer mecanico",
+    "mouse gamer",
 ]
 
 ML_GAMES_QUERIES = [
-    "jogo ps5",
-    "jogo xbox",
+    "jogo ps5 novo",
+    "jogo xbox series",
     "jogo nintendo switch",
-    "controle ps5",
-    "controle xbox",
+    "controle ps5 dualsense",
+    "controle xbox series",
 ]
 
 
-def _ml_item_to_offer(item, source="Mercado Livre", category="tech"):
-    """Converte um item da API ML para o formato padrão do bot."""
+def _to_offer(item, source, category):
     try:
-        price      = float(item.get("price") or 0)
-        orig       = float(item.get("original_price") or 0)
-        orig       = orig if orig > price else None
-        discount   = int(round((1 - price / orig) * 100)) if orig and orig > 0 else None
-        thumbnail  = item.get("thumbnail", "").replace("http://", "https://")
-        # Thumbnail ML vem em baixa resolução — upgradeia para tamanho maior
-        thumbnail  = thumbnail.replace("-I.jpg", "-O.jpg") if thumbnail else ""
+        price = float(item.get("price") or 0)
+        orig  = float(item.get("original_price") or 0)
+        orig  = orig if orig > price else None
+        disc  = int(round((1 - price / orig) * 100)) if orig else None
+        thumb = (item.get("thumbnail") or "").replace("http://", "https://")
+        thumb = thumb.replace("-I.jpg", "-O.jpg")  # imagem maior
+        if price <= 0:
+            return None
         return {
-            "title":          item.get("title", ""),
+            "title":          item.get("title", "").strip(),
             "price":          price,
             "original_price": orig,
-            "discount":       discount,
+            "discount":       disc,
             "url":            item.get("permalink", ""),
-            "image":          thumbnail,
+            "image":          thumb,
             "source":         source,
             "category":       category,
             "timestamp":      datetime.now().isoformat(),
@@ -77,128 +76,130 @@ def _ml_item_to_offer(item, source="Mercado Livre", category="tech"):
         return None
 
 
-def scrape_ml_seller(seller_name, seller_id, category="tech", max_items=30):
-    """Busca produtos em promoção de uma loja específica do ML."""
-    offers = []
+def _ml_search(params, label="ML"):
+    """Wrapper genérico para a API de busca do ML."""
     try:
-        # Busca itens do vendedor com desconto (original_price preenchido = em promoção)
-        url = (
-            f"{ML_API}/sites/{ML_SITE}/search"
-            f"?seller_id={seller_id}"
-            f"&sort=price_asc"
-            f"&limit=50"
+        r = requests.get(
+            f"{ML_API}/sites/{ML_SITE}/search",
+            params=params,
+            headers=HEADERS,
+            timeout=14,
         )
-        r = requests.get(url, headers=HEADERS, timeout=12)
         r.raise_for_status()
-        data = r.json()
-        results = data.get("results", [])
+        return r.json().get("results", [])
+    except Exception as e:
+        print(f"     [{label}] Erro na API: {e}")
+        return []
+
+
+def _resolve_seller_id(nickname):
+    """Converte nickname para seller_id numérico via API do ML."""
+    try:
+        r = requests.get(
+            f"{ML_API}/sites/{ML_SITE}/search",
+            params={"nickname": nickname, "limit": 1},
+            headers=HEADERS,
+            timeout=10,
+        )
+        r.raise_for_status()
+        results = r.json().get("results", [])
+        if results:
+            sid = results[0].get("seller", {}).get("id")
+            if sid:
+                print(f"     Resolvido: {nickname} → seller_id={sid}")
+                return sid
+    except Exception as e:
+        print(f"     Falha ao resolver {nickname}: {e}")
+    return None
+
+
+def scrape_ml_store(store_name, nickname, category="tech", max_items=25):
+    """Busca produtos em promoção de uma loja oficial do ML pelo nickname."""
+    offers = []
+
+    # Tenta resolver o seller_id pelo nickname
+    seller_id = _resolve_seller_id(nickname)
+
+    if seller_id:
+        # Busca produtos da loja com filtro de desconto implícito
+        results = _ml_search(
+            {"seller_id": seller_id, "sort": "price_asc", "limit": 50},
+            label=store_name,
+        )
         for item in results:
-            # Só inclui se tiver desconto real
             op = item.get("original_price")
             p  = item.get("price", 0)
             if op and float(op) > float(p):
-                offer = _ml_item_to_offer(item, source=seller_name, category=category)
-                if offer and offer["title"] and offer["price"] > 0:
-                    offers.append(offer)
+                o = _to_offer(item, source=store_name, category=category)
+                if o:
+                    offers.append(o)
             if len(offers) >= max_items:
                 break
-        print(f"     [{seller_name}] {len(offers)} ofertas com desconto")
-    except Exception as e:
-        print(f"     [{seller_name}] Erro: {e}")
+    else:
+        # Fallback: busca pelo nickname como query
+        results = _ml_search(
+            {"nickname": nickname, "limit": 50},
+            label=f"{store_name} (fallback nickname)",
+        )
+        for item in results:
+            op = item.get("original_price")
+            p  = item.get("price", 0)
+            if op and float(op) > float(p):
+                o = _to_offer(item, source=store_name, category=category)
+                if o:
+                    offers.append(o)
+            if len(offers) >= max_items:
+                break
+
+    print(f"     [{store_name}] {len(offers)} ofertas com desconto")
     return offers
 
 
-def scrape_ml_tech_deals():
-    """Busca as melhores ofertas de tech no ML geral + lojas específicas."""
+def scrape_ml_tech_queries():
+    """Busca geral de tech com desconto real no ML — fallback robusto."""
     offers = []
-
-    # 1. Lojas específicas (KaBuM, Terabyte, Pichau, Amazon)
-    for name, sid in ML_SELLERS.items():
-        cat = "tech"
-        result = scrape_ml_seller(name, sid, category=cat, max_items=20)
-        offers.extend(result)
-        time.sleep(0.5)
-
-    # 2. Busca geral por queries de tech com filtro de desconto
-    for query in ML_TECH_QUERIES[:6]:  # Limita pra não bater rate limit
-        try:
-            url = (
-                f"{ML_API}/sites/{ML_SITE}/search"
-                f"?q={requests.utils.quote(query)}"
-                f"&sort=relevance"
-                f"&limit=10"
-            )
-            r = requests.get(url, headers=HEADERS, timeout=12)
-            r.raise_for_status()
-            data = r.json()
-            for item in data.get("results", []):
-                op = item.get("original_price")
-                p  = item.get("price", 0)
-                if op and float(op) > float(p):
-                    offer = _ml_item_to_offer(item, source="Mercado Livre", category="tech")
-                    if offer and offer["title"] and offer["price"] > 0:
-                        offers.append(offer)
-            time.sleep(0.3)
-        except Exception as e:
-            print(f"     [ML Tech '{query}'] Erro: {e}")
-
-    return offers
-
-
-def scrape_ml_games():
-    """Busca jogos físicos em promoção no ML."""
-    offers = []
-    for query in ML_GAMES_QUERIES:
-        try:
-            url = (
-                f"{ML_API}/sites/{ML_SITE}/search"
-                f"?q={requests.utils.quote(query)}"
-                f"&sort=relevance"
-                f"&limit=10"
-            )
-            r = requests.get(url, headers=HEADERS, timeout=12)
-            r.raise_for_status()
-            data = r.json()
-            for item in data.get("results", []):
-                op = item.get("original_price")
-                p  = item.get("price", 0)
-                if op and float(op) > float(p):
-                    offer = _ml_item_to_offer(item, source="Mercado Livre", category="games")
-                    if offer and offer["title"] and offer["price"] > 0:
-                        offers.append(offer)
-            time.sleep(0.3)
-        except Exception as e:
-            print(f"     [ML Games '{query}'] Erro: {e}")
-    return offers
-
-
-def scrape_ml_featured_deals():
-    """Pega as ofertas em destaque do ML Brasil (página de promoções)."""
-    offers = []
-    try:
-        # Endpoint de ofertas relâmpago / destaques
-        url = f"{ML_API}/sites/{ML_SITE}/search?q=tech&sort=discount_asc&limit=50"
-        r = requests.get(url, headers=HEADERS, timeout=12)
-        r.raise_for_status()
-        data = r.json()
-        for item in data.get("results", []):
+    for query in ML_TECH_QUERIES:
+        results = _ml_search(
+            {"q": query, "sort": "relevance", "limit": 8},
+            label=f"ML Tech '{query}'",
+        )
+        for item in results:
             op = item.get("original_price")
             p  = item.get("price", 0)
             if op and float(op) > float(p):
                 disc = int(round((1 - float(p) / float(op)) * 100))
-                if disc >= 15:  # Só descontos relevantes
-                    offer = _ml_item_to_offer(item, source="Mercado Livre", category="tech")
-                    if offer:
-                        offers.append(offer)
-    except Exception as e:
-        print(f"     [ML Featured] Erro: {e}")
+                if disc >= 10:  # Só descontos relevantes
+                    o = _to_offer(item, source="Mercado Livre", category="tech")
+                    if o:
+                        offers.append(o)
+        time.sleep(0.25)
+    print(f"     [ML Tech Queries] {len(offers)} ofertas encontradas")
+    return offers
+
+
+def scrape_ml_games_queries():
+    """Busca jogos físicos com desconto no ML."""
+    offers = []
+    for query in ML_GAMES_QUERIES:
+        results = _ml_search(
+            {"q": query, "sort": "relevance", "limit": 6},
+            label=f"ML Games '{query}'",
+        )
+        for item in results:
+            op = item.get("original_price")
+            p  = item.get("price", 0)
+            if op and float(op) > float(p):
+                o = _to_offer(item, source="Mercado Livre", category="games")
+                if o:
+                    offers.append(o)
+        time.sleep(0.25)
+    print(f"     [ML Games Queries] {len(offers)} ofertas encontradas")
     return offers
 
 
 # ──────────────────────────────────────────
-# STEAM — API pública oficial
+# STEAM
 # ──────────────────────────────────────────
-
 def scrape_steam_sales():
     offers = []
     try:
@@ -207,8 +208,8 @@ def scrape_steam_sales():
         data = r.json()
         specials = data.get("specials", {}).get("items", [])
         for item in specials[:30]:
-            orig  = item.get("original_price", 0) / 100 if item.get("original_price") else 0
-            final = item.get("final_price", 0) / 100 if item.get("final_price") else 0
+            orig  = (item.get("original_price") or 0) / 100
+            final = (item.get("final_price") or 0) / 100
             disc  = item.get("discount_percent", 0)
             if final <= 0:
                 continue
@@ -217,7 +218,7 @@ def scrape_steam_sales():
                 "price":          final,
                 "original_price": orig if orig != final else None,
                 "discount":       disc if disc > 0 else None,
-                "url":            f"https://store.steampowered.com/app/{item.get('id', '')}",
+                "url":            f"https://store.steampowered.com/app/{item.get('id','')}",
                 "image":          item.get("header_image", ""),
                 "source":         "Steam",
                 "category":       "games",
@@ -232,7 +233,6 @@ def scrape_steam_sales():
 # ──────────────────────────────────────────
 # NUUVEM
 # ──────────────────────────────────────────
-
 def scrape_nuuvem():
     offers = []
     try:
@@ -241,7 +241,7 @@ def scrape_nuuvem():
         soup = BeautifulSoup(r.text, "html.parser")
         cards = soup.select(".product-card--grid, .product-card, article")
         for card in cards[:25]:
-            title_el = card.select_one("h3, h2, .product-card--title, .game-title")
+            title_el = card.select_one("h3, h2, .product-card--title")
             price_el  = card.select_one(".product-card--price, .price-discount, .price")
             orig_el   = card.select_one(".product-card--original-price, .price-original")
             disc_el   = card.select_one(".discount-tag, .discount, .badge-discount")
@@ -249,28 +249,23 @@ def scrape_nuuvem():
             img_el    = card.select_one("img")
             if not title_el:
                 continue
-            import re
-            def clean_num(t):
+            def cn(t):
                 if not t: return 0
                 n = re.sub(r"[^\d,]", "", t).replace(",", ".")
                 try: return float(n)
                 except: return 0
-            price_val = clean_num(price_el.get_text() if price_el else "")
-            orig_val  = clean_num(orig_el.get_text() if orig_el else "") or None
-            disc_text = disc_el.get_text(strip=True) if disc_el else ""
-            disc_num  = re.sub(r"[^\d]", "", disc_text)
-            disc_val  = int(disc_num) if disc_num else None
-            if price_val <= 0:
-                continue
+            pv = cn(price_el.get_text() if price_el else "")
+            ov = cn(orig_el.get_text() if orig_el else "") or None
+            dn = re.sub(r"[^\d]", "", disc_el.get_text(strip=True) if disc_el else "")
+            if pv <= 0: continue
             href = link_el["href"] if link_el else url
-            full_url = href if href.startswith("http") else "https://www.nuuvem.com" + href
             offers.append({
                 "title":          title_el.get_text(strip=True),
-                "price":          price_val,
-                "original_price": orig_val,
-                "discount":       disc_val,
-                "url":            full_url,
-                "image":          img_el.get("src", img_el.get("data-src", "")) if img_el else "",
+                "price":          pv,
+                "original_price": ov,
+                "discount":       int(dn) if dn else None,
+                "url":            href if href.startswith("http") else "https://www.nuuvem.com" + href,
+                "image":          img_el.get("src", img_el.get("data-src","")) if img_el else "",
                 "source":         "Nuuvem",
                 "category":       "games",
                 "timestamp":      datetime.now().isoformat(),
@@ -284,43 +279,35 @@ def scrape_nuuvem():
 # ──────────────────────────────────────────
 # INSTANT GAMING
 # ──────────────────────────────────────────
-
 def scrape_instant_gaming():
     offers = []
     try:
         url = "https://www.instant-gaming.com/en/?type[]=steam&type[]=gog&currency=BRL&sort_by=discount"
         r = requests.get(url, headers=HEADERS, timeout=12)
         soup = BeautifulSoup(r.text, "html.parser")
-        import re
         cards = soup.select(".item.mainshadow, .game-card, .listing-item")
         for card in cards[:25]:
-            title_el = card.select_one(".title, .game-title, h3")
-            price_el  = card.select_one(".price, .current-price, .bestprice")
-            disc_el   = card.select_one(".discount, .promo, .perc")
+            title_el = card.select_one(".title, h3")
+            price_el  = card.select_one(".price, .bestprice")
+            disc_el   = card.select_one(".discount, .perc")
             link_el   = card.select_one("a")
             img_el    = card.select_one("img")
-            if not title_el:
-                continue
-            price_text = price_el.get_text(strip=True) if price_el else "0"
-            price_num  = re.sub(r"[^\d,\.]", "", price_text)
-            disc_text  = disc_el.get_text(strip=True) if disc_el else ""
-            disc_num   = re.sub(r"[^\d]", "", disc_text)
+            if not title_el: continue
+            pn = re.sub(r"[^\d,\.]", "", price_el.get_text(strip=True) if price_el else "0")
+            dn = re.sub(r"[^\d]", "", disc_el.get_text(strip=True) if disc_el else "")
             try:
-                price_val = float(price_num.replace(",", ".")) if price_num else 0
-                disc_val  = int(disc_num) if disc_num else None
-            except Exception:
-                price_val, disc_val = 0, None
-            if price_val <= 0:
-                continue
+                pv = float(pn.replace(",", ".")) if pn else 0
+                dv = int(dn) if dn else None
+            except: pv, dv = 0, None
+            if pv <= 0: continue
             href = link_el["href"] if link_el else url
-            full_url = href if href.startswith("http") else "https://www.instant-gaming.com" + href
             offers.append({
                 "title":          title_el.get_text(strip=True),
-                "price":          price_val,
+                "price":          pv,
                 "original_price": None,
-                "discount":       disc_val,
-                "url":            full_url,
-                "image":          img_el.get("src", img_el.get("data-src", "")) if img_el else "",
+                "discount":       dv,
+                "url":            href if href.startswith("http") else "https://www.instant-gaming.com" + href,
+                "image":          img_el.get("src", img_el.get("data-src","")) if img_el else "",
                 "source":         "Instant Gaming",
                 "category":       "games",
                 "timestamp":      datetime.now().isoformat(),
@@ -334,43 +321,35 @@ def scrape_instant_gaming():
 # ──────────────────────────────────────────
 # GREEN MAN GAMING
 # ──────────────────────────────────────────
-
 def scrape_green_man_gaming():
     offers = []
     try:
         url = "https://www.greenmangaming.com/sale/"
         r = requests.get(url, headers=HEADERS, timeout=12)
         soup = BeautifulSoup(r.text, "html.parser")
-        import re
         cards = soup.select(".product-tile, .game-tile, article.game")
         for card in cards[:20]:
-            title_el = card.select_one("h3, h2, .product-name, .game-name")
-            price_el  = card.select_one(".price, .sale-price, .current-price")
-            disc_el   = card.select_one(".discount, .saving, .off-amount")
+            title_el = card.select_one("h3, h2, .product-name")
+            price_el  = card.select_one(".price, .sale-price")
+            disc_el   = card.select_one(".discount, .saving")
             link_el   = card.select_one("a")
             img_el    = card.select_one("img")
-            if not title_el:
-                continue
-            price_text = price_el.get_text(strip=True) if price_el else "0"
-            price_num  = re.sub(r"[^\d\.]", "", price_text)
-            disc_text  = disc_el.get_text(strip=True) if disc_el else ""
-            disc_num   = re.sub(r"[^\d]", "", disc_text)
+            if not title_el: continue
+            pn = re.sub(r"[^\d\.]", "", price_el.get_text(strip=True) if price_el else "0")
+            dn = re.sub(r"[^\d]", "", disc_el.get_text(strip=True) if disc_el else "")
             try:
-                price_val = float(price_num) if price_num else 0
-                disc_val  = int(disc_num) if disc_num else None
-            except Exception:
-                price_val, disc_val = 0, None
-            if price_val <= 0:
-                continue
+                pv = float(pn) if pn else 0
+                dv = int(dn) if dn else None
+            except: pv, dv = 0, None
+            if pv <= 0: continue
             href = link_el["href"] if link_el else url
-            full_url = href if href.startswith("http") else "https://www.greenmangaming.com" + href
             offers.append({
                 "title":          title_el.get_text(strip=True),
-                "price":          price_val,
+                "price":          pv,
                 "original_price": None,
-                "discount":       disc_val,
-                "url":            full_url,
-                "image":          img_el.get("src", "") if img_el else "",
+                "discount":       dv,
+                "url":            href if href.startswith("http") else "https://www.greenmangaming.com" + href,
+                "image":          img_el.get("src","") if img_el else "",
                 "source":         "Green Man Gaming",
                 "category":       "games",
                 "timestamp":      datetime.now().isoformat(),
@@ -384,29 +363,37 @@ def scrape_green_man_gaming():
 # ──────────────────────────────────────────
 # RUNNER PRINCIPAL
 # ──────────────────────────────────────────
-
 def run_all_scrapers():
     print("[BOT] Iniciando coleta de ofertas...")
     all_offers = []
 
-    scrapers = [
-        # Tech via ML (KaBuM, Terabyte, Pichau, Amazon, ML geral)
-        ("ML — KaBuM / Terabyte / Tech",  scrape_ml_tech_deals),
-        ("ML — Jogos físicos",             scrape_ml_games),
-        # Jogos digitais
-        ("Steam",                          scrape_steam_sales),
-        ("Nuuvem",                         scrape_nuuvem),
-        ("Instant Gaming",                 scrape_instant_gaming),
-        ("Green Man Gaming",               scrape_green_man_gaming),
-    ]
+    # 1. Lojas de tech via ML (KaBuM, Terabyte, Pichau, Amazon)
+    print("  -> Coletando lojas tech no ML...")
+    for name, nick in ML_STORES.items():
+        result = scrape_ml_store(name, nick, category="tech", max_items=25)
+        all_offers.extend(result)
+        time.sleep(0.5)
 
-    for name, fn in scrapers:
-        print(f"  -> Coletando {name}...")
-        try:
-            result = fn()
-            all_offers.extend(result)
-        except Exception as e:
-            print(f"     ERRO geral: {e}")
+    # 2. Queries de tech no ML geral (fallback + complemento)
+    print("  -> Coletando tech por queries no ML...")
+    all_offers.extend(scrape_ml_tech_queries())
+
+    # 3. Jogos físicos no ML
+    print("  -> Coletando jogos físicos no ML...")
+    all_offers.extend(scrape_ml_games_queries())
+
+    # 4. Jogos digitais
+    print("  -> Coletando Steam...")
+    all_offers.extend(scrape_steam_sales())
+
+    print("  -> Coletando Nuuvem...")
+    all_offers.extend(scrape_nuuvem())
+
+    print("  -> Coletando Instant Gaming...")
+    all_offers.extend(scrape_instant_gaming())
+
+    print("  -> Coletando Green Man Gaming...")
+    all_offers.extend(scrape_green_man_gaming())
 
     # Deduplicação por URL
     seen = set()
@@ -417,10 +404,10 @@ def run_all_scrapers():
             seen.add(key)
             unique.append(o)
 
-    # Remove entradas sem preço e sem desconto
-    unique = [o for o in unique if o.get("price", 0) > 0 or o.get("discount")]
+    # Remove sem preço e sem título
+    unique = [o for o in unique if o.get("price", 0) > 0 and o.get("title")]
 
-    print(f"[BOT] Total: {len(unique)} ofertas únicas coletadas")
+    print(f"[BOT] Total: {len(unique)} ofertas únicas")
     return unique
 
 
